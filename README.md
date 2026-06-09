@@ -1,31 +1,31 @@
 # Swift IG Metadata
 
-A Swift library for fetching metadata from Instagram posts. No API key, developer account, or authentication required — uses Instagram's public GraphQL endpoint.
+Fetch metadata from Instagram posts, reels, and IGTV without authentication. `IGMetadata` queries Instagram's public GraphQL endpoint — the same approach used by yt-dlp — to retrieve captions, author info, engagement counts, video and photo URLs, and carousel items. No API key, developer account, or login required.
 
 ## Features
 
-- 🎯 **Simple API** — fetch post metadata with a single async call
-- 📊 **Rich metadata** — caption, author, likes, comments, date, location, hashtags, mentions
-- 🎬 **Video info** — duration, view count, direct MP4 download URLs at multiple qualities
-- 🖼️ **Photo support** — direct image URLs with dimensions
-- 🎠 **Carousel support** — all items from carousel/sidecar posts with individual metadata
-- 🔒 **No API key required** — uses public GraphQL, embed, and direct page endpoints
-- 🍎 **Cross-platform** — macOS, iOS, tvOS, watchOS
-- ⚡ **Async/await** native — built for modern Swift concurrency
-- 🛡️ **Typed error handling** — specific errors for every failure case
-- 🔗 **Flexible input** — supports all Instagram URL formats and raw shortcodes
+- 🎯 **No authentication** — uses Instagram's public web API; no API key, login, or developer account
+- 🔗 **Flexible input** — accepts reel, post, reels, and IGTV URLs, or a raw shortcode
+- 🎬 **Video download URLs** — exposes all available variants plus a `bestUrl` convenience for the highest-quality stream
+- 🖼️ **Photos & carousels** — extracts single images and every item of a multi-photo/video carousel
+- 👤 **Author details** — username, display name, profile picture, verification status, and profile URL
+- 📊 **Engagement metrics** — like and comment counts, with human-readable formatted variants
+- 🏷️ **Caption parsing** — derives hashtags, mentions, and URLs directly from the caption
+- 📅 **Rich metadata** — media type, creation date, location, dimensions, and accessibility captions
+- 🔁 **Resilient fetch pipeline** — falls back from GraphQL to embed-page and direct-page scraping
+- 🧱 **Typed errors** — descriptive `IGMetadataError` cases for invalid URLs, rate limiting, and missing posts
+- ⚡ **Async/await** — a single `async throws` entry point
+- 📦 **Zero dependencies** — pure Foundation, fully `Sendable`
 
 ## Requirements
 
 - macOS 13.0+ / iOS 16.0+ / tvOS 16.0+ / watchOS 9.0+
 - Swift 6.0+
-- Xcode 16.0+
+- Xcode 26.0+
 
 ## Installation
 
 ### Swift Package Manager
-
-Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
@@ -33,236 +33,106 @@ dependencies: [
 ]
 ```
 
-Or in Xcode:
-1. File → Add Package Dependencies
-2. Enter the repository URL
-3. Choose version requirements
-
 ## Usage
 
-### Fetch Post Metadata
+### Fetching post metadata
 
 ```swift
 import IGMetadata
 
-let post = try await IGMetadata.fetch("https://www.instagram.com/reel/DV1zGAUDzdf/")
+let post = try await IGMetadata.fetch("https://www.instagram.com/reel/ABC123/")
 
 print(post.caption ?? "No caption")
-print("\(post.author.name ?? "Unknown") (@\(post.author.username ?? ""))")
+print(post.author.username ?? "Unknown")
 print("Likes: \(post.formattedLikeCount ?? "N/A")")
-print("Date: \(post.formattedDate ?? "N/A")")
-print("Type: \(post.mediaType)")
 ```
 
-### Video Info
+### Downloading video
 
 ```swift
 let post = try await IGMetadata.fetch("https://www.instagram.com/reel/ABC123/")
 
 if let video = post.video {
     print("Duration: \(video.formattedDuration)")
-    print("Views: \(video.formattedViewCount ?? "N/A")")
-
-    // Direct MP4 download (best quality) — use this for downloading/transcribing
-    if let mp4Url = video.bestUrl {
-        print("Download: \(mp4Url)")
-    }
-
-    // All available variants
-    for variant in video.variants {
-        print("\(variant.width)x\(variant.height) — \(variant.url)")
+    if let url = video.bestUrl {
+        print("Download: \(url)")
     }
 }
 ```
 
-### Photos
+### Photos and carousels
 
 ```swift
-let post = try await IGMetadata.fetch("https://www.instagram.com/p/ABC123/")
+let post = try await IGMetadata.fetch("ABC123DEF") // raw shortcode
 
 for photo in post.photos {
     print("\(photo.url) (\(photo.width)x\(photo.height))")
 }
-```
-
-### Carousel Posts
-
-```swift
-let post = try await IGMetadata.fetch("https://www.instagram.com/p/ABC123/")
 
 for item in post.carouselItems {
-    if item.isVideo {
-        print("Video: \(item.videoUrl ?? "N/A") (\(item.width)x\(item.height))")
-    } else {
-        print("Photo: \(item.displayUrl) (\(item.width)x\(item.height))")
-    }
+    print("\(item.isVideo ? "Video" : "Photo"): \(item.displayUrl)")
 }
 ```
 
-### Post Entities
+### Caption entities
 
 ```swift
-let post = try await IGMetadata.fetch("https://www.instagram.com/reel/ABC123/")
+let post = try await IGMetadata.fetch(url)
 
-print("Hashtags: \(post.hashtags)")    // ["swift", "ios"]
-print("Mentions: \(post.mentions)")    // ["apple", "xcode"]
-print("URLs: \(post.urls)")            // ["https://example.com"]
+print(post.hashtags) // ["sunset", "photography"]
+print(post.mentions) // ["someuser"]
+print(post.urls)     // ["https://example.com"]
 ```
 
-### URL Formats
-
-All common Instagram URL formats are supported:
-
-```swift
-// Reel
-let post = try await IGMetadata.fetch("https://www.instagram.com/reel/ABC123/")
-
-// Post
-let post = try await IGMetadata.fetch("https://www.instagram.com/p/ABC123/")
-
-// Reels (plural)
-let post = try await IGMetadata.fetch("https://www.instagram.com/reels/ABC123/")
-
-// TV/IGTV
-let post = try await IGMetadata.fetch("https://www.instagram.com/tv/ABC123/")
-
-// With tracking parameters (stripped automatically)
-let post = try await IGMetadata.fetch("https://www.instagram.com/reel/ABC123/?igsh=abc123")
-
-// Raw shortcode
-let post = try await IGMetadata.fetch("DV1zGAUDzdf")
-```
-
-### Error Handling
+### Error handling
 
 ```swift
 do {
     let post = try await IGMetadata.fetch(url)
-    print(post.caption ?? "No caption")
-} catch IGMetadataError.postNotFound {
-    print("Post doesn't exist or is private")
-} catch IGMetadataError.rateLimited {
-    print("Too many requests — try again later")
-} catch IGMetadataError.invalidShortcode {
-    print("Couldn't extract a shortcode from the URL")
-} catch {
-    print("Error: \(error.localizedDescription)")
+    print(post.shortcode)
+} catch let error as IGMetadataError {
+    switch error {
+    case .invalidUrl, .invalidShortcode:
+        print("Could not parse the input")
+    case .postNotFound:
+        print("Post not found or private")
+    case .rateLimited:
+        print("Rate limited — try again later")
+    case .noVideoFound:
+        print("This post has no video")
+    case .networkError(let message), .parsingError(let message):
+        print("Failed: \(message)")
+    }
 }
 ```
 
-## Models
-
-### `PostMetadata`
-
-The main result struct containing all post data.
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `shortcode` | `String` | The shortcode from the URL |
-| `id` | `String?` | Numeric media ID |
-| `url` | `String` | Full post URL |
-| `mediaType` | `MediaType` | `.photo`, `.video`, `.carousel`, or `.unknown` |
-| `caption` | `String?` | Post caption text |
-| `accessibilityCaption` | `String?` | AI-generated alt text |
-| `author` | `AuthorInfo` | Author details |
-| `likeCount` | `Int?` | Number of likes |
-| `commentCount` | `Int?` | Number of comments |
-| `video` | `VideoInfo?` | Video metadata (if video/reel) |
-| `photos` | `[PhotoInfo]` | Photo URLs with dimensions |
-| `carouselItems` | `[CarouselItem]` | Carousel items (if sidecar) |
-| `width` | `Int?` | Primary display width |
-| `height` | `Int?` | Primary display height |
-| `createdAt` | `Date?` | Creation date |
-| `locationName` | `String?` | Tagged location name |
-| `hashtags` | `[String]` | Hashtags from caption |
-| `mentions` | `[String]` | Mentions from caption |
-| `urls` | `[String]` | URLs from caption |
-| `formattedLikeCount` | `String?` | Likes with grouping separators |
-| `formattedCommentCount` | `String?` | Comments with grouping separators |
-| `formattedDate` | `String?` | Readable date string |
-
-### `VideoInfo`
-
-Video-specific metadata (only present for video/reel posts).
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `url` | `String` | Direct video URL |
-| `durationSeconds` | `Double` | Duration in seconds |
-| `formattedDuration` | `String` | Duration as `"M:SS"` or `"H:MM:SS"` |
-| `width` | `Int` | Video width in pixels |
-| `height` | `Int` | Video height in pixels |
-| `viewCount` | `Int?` | Number of views |
-| `formattedViewCount` | `String?` | Views with grouping separators |
-| `variants` | `[VideoVariant]` | Available quality variants |
-| `bestUrl` | `URL?` | Highest-quality direct download URL |
-
-### `VideoVariant`
-
-A single video quality variant.
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `url` | `String` | Direct URL to this variant |
-| `width` | `Int` | Width in pixels |
-| `height` | `Int` | Height in pixels |
-| `id` | `String?` | Variant identifier |
-
-### `PhotoInfo`
-
-A photo from a post.
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `url` | `String` | Direct image URL |
-| `width` | `Int` | Width in pixels |
-| `height` | `Int` | Height in pixels |
-| `accessibilityCaption` | `String?` | AI-generated alt text |
-
-### `CarouselItem`
-
-A single item in a carousel/sidecar post.
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `isVideo` | `Bool` | Whether this item is a video |
-| `displayUrl` | `String` | Display URL (photo or video thumbnail) |
-| `videoUrl` | `String?` | Video URL (if video) |
-| `videoDuration` | `Double?` | Video duration (if video) |
-| `width` | `Int` | Width in pixels |
-| `height` | `Int` | Height in pixels |
-| `accessibilityCaption` | `String?` | AI-generated alt text |
-
-### `AuthorInfo`
-
-Information about the post's author.
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `String?` | Display name |
-| `username` | `String?` | Handle (without @) |
-| `id` | `String?` | Numeric user ID |
-| `profilePicUrl` | `String?` | Profile picture URL |
-| `isVerified` | `Bool` | Verification status |
-| `profileUrl` | `String?` | Profile page URL |
-
 ## How It Works
 
-The library mirrors yt-dlp's Instagram extraction approach:
+`IGMetadata.fetch` resolves the input to a shortcode, then runs a multi-stage pipeline:
 
-1. **Session setup** (`i.instagram.com/api/v1/web/get_ruling_for_content`) — establishes a session and obtains a CSRF token via cookies. No auth needed.
-2. **GraphQL query** (`instagram.com/graphql/query`) — fetches comprehensive post data using doc_id `8845758582119845` with the CSRF token. Returns caption, author, engagement, dimensions, video URLs, carousel items, and more.
-3. **Embed fallback** (`instagram.com/reel/ABC/embed/`) — scrapes the embed page for video/photo URLs when GraphQL fails.
-4. **Direct page fallback** (`instagram.com/reel/ABC/`) — scrapes og:video and og:image meta tags as a last resort.
+1. Establishes a session against Instagram's ruling API to obtain a CSRF token.
+2. Queries the GraphQL endpoint (using the same `doc_id` as yt-dlp) for the post data.
+3. Falls back to the embed page and then direct page scraping if GraphQL is unavailable.
 
-For most posts, only the first two requests are made (session setup + GraphQL). Fallbacks are only used if GraphQL returns an error.
+## Models
 
-## Limitations
+| Model | Description |
+|-------|-------------|
+| `PostMetadata` | Top-level result: shortcode, media type, caption, author, counts, media, dimensions, date, location, plus derived `hashtags` / `mentions` / `urls` and `formatted*` helpers |
+| `AuthorInfo` | Username, name, id, profile picture, `isVerified`, and computed `profileUrl` |
+| `VideoInfo` | Primary video URL, dimensions, duration, view count, `variants`, `bestUrl`, and formatted helpers |
+| `VideoVariant` | A single video rendition: URL, width, height, id, content type |
+| `PhotoInfo` | Image URL, dimensions, and accessibility caption |
+| `CarouselItem` | A single carousel slide: `isVideo`, display/video URLs, duration, dimensions |
+| `MediaType` | `.photo`, `.video`, `.carousel`, `.unknown`, with `hasVideo` / `isCarousel` helpers |
+| `IGMetadataError` | Typed errors with `LocalizedError` descriptions |
 
-- **Rate limiting** — Instagram may rate-limit requests from IPs making too many calls. Reduce frequency if you encounter `rateLimited` errors.
-- **Private posts** — Private posts are not accessible without authentication.
-- **Login wall** — Instagram may occasionally require login for certain content. The session setup step helps mitigate this.
-- **Endpoint stability** — These are unofficial endpoints that Instagram may change at any time. Updates will be provided as needed.
+## Use Cases
+
+- Building download tools for public Instagram media
+- Aggregating and archiving post metadata
+- Extracting hashtags and mentions for analytics
+- Previewing Instagram links inside an app
 
 ## Testing
 
@@ -270,17 +140,7 @@ For most posts, only the first two requests are made (session setup + GraphQL). 
 swift test
 ```
 
-The test suite includes unit tests for shortcode extraction, formatting, and error handling, plus integration tests that hit Instagram's live endpoints.
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+Tests cover shortcode extraction, URL parsing, and model decoding.
 
 ## License
 
